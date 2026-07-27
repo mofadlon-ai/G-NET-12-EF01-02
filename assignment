@@ -1,0 +1,165 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace EventHub_Simplified
+{
+    #region Models
+    // Organizer (Data Annotations)
+    public class Organizer
+    {
+        [Key]
+        public int Id { get; set; }
+        [Required, MaxLength(100)]
+        public string Name { get; set; } = "";
+        [MaxLength(100)]
+        public string? CompanyName { get; set; }
+        public bool IsVerified { get; set; }
+        public OrganizerProfile? Profile { get; set; }
+        public List<Event> Events { get; set; } = new();
+    }
+
+    // OrganizerProfile (Fluent API)
+    public class OrganizerProfile
+    {
+        public int Id { get; set; }
+        public string Bio { get; set; } = "";
+        public string? WebsiteUrl { get; set; }
+        public string? LogoUrl { get; set; }
+        public int OrganizerId { get; set; }
+        public Organizer Organizer { get; set; } = null!;
+    }
+
+    // Event (Class Configuration)
+    public class Event
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+        public string Description { get; set; } = "";
+        public DateTime StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+        public int MaxAttendees { get; set; }
+        public int OrganizerId { get; set; }
+        public Organizer Organizer { get; set; } = null!;
+        public int? ParentEventId { get; set; }
+        public Event? ParentEvent { get; set; }
+        public List<Event> Sessions { get; set; } = new();
+        public List<EventRegistration> Registrations { get; set; } = new();
+    }
+
+    // Address (Owned Value Object)
+    public class Address
+    {
+        public string Street { get; set; } = "";
+        public string City { get; set; } = "";
+        public string Country { get; set; } = "";
+        public string PostalCode { get; set; } = "";
+    }
+
+    // Attendee (Class Configuration)
+    public class Attendee
+    {
+        public int Id { get; set; }
+        public string FullName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public Address Address { get; set; } = new();
+        public Badge? Badge { get; set; }
+        public List<EventRegistration> Registrations { get; set; } = new();
+    }
+
+    // Badge (Data Annotations)
+    public class Badge
+    {
+        [Key]
+        public int Id { get; set; }
+        [Required, MaxLength(50)]
+        public string BadgeNumber { get; set; } = "";
+        public DateTime DateIssued { get; set; }
+        [Required, MaxLength(20)]
+        public string Tier { get; set; } = "Standard";
+        public int AttendeeId { get; set; }
+        public Attendee Attendee { get; set; } = null!;
+    }
+
+    // EventRegistration (Fluent API Join Table)
+    public class EventRegistration
+    {
+        public int EventId { get; set; }
+        public Event Event { get; set; } = null!;
+        public int AttendeeId { get; set; }
+        public Attendee Attendee { get; set; } = null!;
+        public string? NoteToOrganizer { get; set; }
+        public DateTime RegisteredAt { get; set; }
+    }
+    #endregion
+
+    #region Separate Configurations
+    public class EventConfiguration : IEntityTypeConfiguration<Event>
+    {
+        public void Configure(EntityTypeBuilder<Event> b)
+        {
+            b.HasKey(e => e.Id);
+            b.Property(e => e.Title).IsRequired().HasMaxLength(150);
+            b.HasOne(e => e.ParentEvent).WithMany(e => e.Sessions).HasForeignKey(e => e.ParentEventId).OnDelete(DeleteBehavior.Restrict);
+            b.Property<DateTime>("CreatedAt");
+            b.Property<DateTime>("LastModified");
+        }
+    }
+
+    public class AttendeeConfiguration : IEntityTypeConfiguration<Attendee>
+    {
+        public void Configure(EntityTypeBuilder<Attendee> b)
+        {
+            b.HasKey(a => a.Id);
+            b.Property(a => a.FullName).IsRequired().HasMaxLength(100);
+            b.OwnsOne(a => a.Address);
+            b.HasOne(a => a.Badge).WithOne(b => b.Attendee).HasForeignKey<Badge>(b => b.AttendeeId);
+        }
+    }
+    #endregion
+
+    #region DbContext & Program
+    public class EventHubDbContext : DbContext
+    {
+        public DbSet<Organizer> Organizers => Set<Organizer>();
+        public DbSet<OrganizerProfile> Profiles => Set<OrganizerProfile>();
+        public DbSet<Event> Events => Set<Event>();
+        public DbSet<Attendee> Attendees => Set<Attendee>();
+        public DbSet<Badge> Badges => Set<Badge>();
+        public DbSet<EventRegistration> Registrations => Set<EventRegistration>();
+
+        protected override void OnConfiguring(DbContextOptionsBuilder options) =>
+            options.UseSqlServer("Server=.;Database=EventHubDb;Trusted_Connection=True;TrustServerCertificate=True;");
+
+        protected override void OnModelCreating(ModelBuilder mb)
+        {
+            mb.ApplyConfiguration(new EventConfiguration());
+            mb.ApplyConfiguration(new AttendeeConfiguration());
+
+            // OrganizerProfile Configuration
+            mb.Entity<OrganizerProfile>(b => {
+                b.HasKey(p => p.Id);
+                b.HasOne(p => p.Organizer).WithOne(o => o.Profile).HasForeignKey<OrganizerProfile>(p => p.OrganizerId);
+            });
+
+            // Composite Key for EventRegistration
+            mb.Entity<EventRegistration>(b => {
+                b.HasKey(r => new { r.EventId, r.AttendeeId });
+                b.Property(r => r.RegisteredAt).HasDefaultValueSql("GETUTCDATE()");
+            });
+        }
+    }
+
+    internal class Program
+    {
+        static void Main()
+        {
+            using var db = new EventHubDbContext();
+            db.Database.EnsureCreated();
+            Console.WriteLine("Database created successfully!");
+        }
+    }
+    #endregion
+}
