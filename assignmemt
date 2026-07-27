@@ -1,0 +1,88 @@
+using System;
+using System.Collections.Generic;
+using Microsoft.EntityFrameworkCore;
+
+namespace Bookstore_EFCore_Assignment
+{
+    #region Entities (By Convention)
+    // Entity 1: Book
+    public class Book
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string ISBN { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public int PageCount { get; set; }
+        public int PublicationYear { get; set; }
+        public bool IsInStock { get; set; }
+
+        // Navigation Properties & Foreign Keys (Standard EF Conventions)
+        public int AuthorId { get; set; }
+        public Author Author { get; set; } = null!;
+
+        public int CategoryId { get; set; }
+        public Category Category { get; set; } = null!;
+    }
+
+    // Entity 2: Author
+    public class Author
+    {
+        public int Id { get; set; }
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Bio { get; set; } = string.Empty;
+        public DateTime DateOfBirth { get; set; }
+
+        public List<Book> Books { get; set; } = new();
+    }
+
+    // Entity 3: Category
+    public class Category
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+
+        public List<Book> Books { get; set; } = new();
+    }
+    #endregion
+
+    #region DbContext Configuration
+    public class BookstoreDbContext : DbContext
+    {
+        public DbSet<Book> Books { get; set; }
+        public DbSet<Author> Authors { get; set; }
+        public DbSet<Category> Categories { get; set; }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            // Configure SQL Server provider using local connection string
+            optionsBuilder.UseSqlServer("Server=.;Database=ReadMoreBooksDb;Trusted_Connection=True;TrustServerCertificate=True;");
+        }
+    }
+    #endregion
+
+    #region Application Main Method
+    internal class Program
+    {
+        static void Main(string[] args)
+        {
+            using var context = new BookstoreDbContext();
+
+            // Ensures database exists (Creates database schema based on conventions)
+            bool created = context.Database.EnsureCreated();
+
+            if (created)
+            {
+                Console.WriteLine("Database created successfully!");
+            }
+            else
+            {
+                Console.WriteLine("Database already exists.");
+            }
+        }
+    }
+    #endregion
+}
